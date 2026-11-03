@@ -158,7 +158,7 @@ def main(args):
     if not o.strict_location:
         extra = [*extra, "--use-found"]
 
-    surveys = surveys_from_csv(o.csv, o.status)
+    surveys = all_surveys = surveys_from_csv(o.csv, o.status)
     print(f"{len(surveys)} UPC(s) with New Structure = 1{f' and Status = {o.status}' if o.status else ''} in {o.csv}")
     if o.resume:
         done = [s for s in surveys if finished(Path(o.resume) / log_name(s))]
@@ -203,7 +203,7 @@ def main(args):
         if r[4] != "extracted":
             print(f"  {r[0]}/{r[1]}/{r[2]} {r[3]:20} {r[4]}")
     print(f"summary: {summary}")
-    update_intervals(surveys)
+    update_intervals(all_surveys)        # with --resume too: the UPCs of the stopped run are added as well
     try:
         where = upload_logs(log_dir)
         if where:
