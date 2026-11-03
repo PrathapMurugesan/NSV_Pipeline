@@ -115,6 +115,23 @@ def _tolerance(defect, d2_values):
     return tol + 1e-9                         # 3.2 − 3.1 is 0.10000000000000009 in floating point
 
 
+def _bi_to_iri(bi):
+    """Inverse of BI = 630 × IRI^1.12 (common/segments.py)."""
+    return (num(bi).clip(lower=0) / 630.0) ** (1 / 1.12)
+
+
+def _roughness_iri_ok(d2_bi, silver_bi):
+    """D2 builds BI from an IRI it rounded first (D2 BI 881.6869 = 630 × 1.35^1.12). Its BI values then turn back
+    into IRI values with few decimals, and the right comparison is in IRI, within one unit of that decimal
+    (silver IRI 1.348 vs D2 1.35). When D2's BI does not come from a rounded IRI (≥ 4 decimals back), nothing
+    extra passes here and the BI tolerance alone decides."""
+    d2_iri, sv_iri = _bi_to_iri(d2_bi), _bi_to_iri(silver_bi)
+    k = _decimals(d2_iri)
+    if k > 3:
+        return pd.Series(False, index=d2_bi.index)
+    return ((d2_iri - sv_iri).abs() <= 10.0 ** -k + 1e-9).fillna(False)
+
+
 def _row(check, std, defect, lane, level, total, matched, skipped, note=''):
     pct = round(100.0 * matched / total, 1) if total else None
     return {'upc': None, 'check': check, 'std': std, 'defect': defect, 'lane': lane, 'level': level,
@@ -290,6 +307,8 @@ def _value_and_breach_checks(prj, tables, summary, mism):
                     j = ref.join(sb, on='bin', how='left')
                     diff = (j['d2'] - num(j['silver'])).abs()
                     ok = diff <= _tolerance(defect, ref['d2'])
+                    if defect == 'roughness':
+                        ok = ok | _roughness_iri_ok(j['d2'], num(j['silver']))
                     summary.append(_row('value', std, defect, lane, level, len(j), int(ok.sum()), skipped))
                     bad = j[~ok]
                     for _, r in bad.iterrows():
