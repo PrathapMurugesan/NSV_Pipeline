@@ -258,8 +258,14 @@ def cross_level_check(prj, tables_by_name):
         for name in ['As per CA', 'As per IRC']:
             cc = c[c['threshold_name'] == name].assign(km=lambda z: z['start_chainage'].astype('int64') // 1000 * 1000)
             grp = cc.groupby(['lane', 'km'])
-            if d == 'ravelling':          # 1 km % = total sq m × 100 ÷ (3.5 m × surveyed length; 3,500 for a full km)
-                exp = grp['ravelling_area_sqm'].sum(min_count=1) * 100.0 / (3.5 * grp['length_m'].sum())
+            if d == 'ravelling':          # 1 km % = total sq m of the generated 10 m rows × 100 ÷ (3.5 m × the
+                # parent's own surveyed length): the 10 m table splits a road's last odd row (38100-38111) to 10 m,
+                # so its lengths are not the surveyed length; the parent length itself is checked by source_value
+                sqm = grp['ravelling_area_sqm'].sum(min_count=1)
+                pp0 = p[p['threshold_name'] == name]
+                plen = pd.Series(pd.to_numeric(pp0['length_m'], errors='coerce').values, index=pd.MultiIndex.from_arrays(
+                    [pp0['lane'], pp0['start_chainage'].astype('int64') // 1000 * 1000]))
+                exp = sqm * 100.0 / (3.5 * plen.reindex(sqm.index))
             elif d == 'roughness' and config.ROUGHNESS_AGGREGATION == 'iri_formula':
                 exp = (630.0 * grp['iri_value'].mean() ** 1.12).fillna(grp['metric_value'].mean())
             else:

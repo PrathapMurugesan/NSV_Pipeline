@@ -218,40 +218,44 @@ def _failing_lanes_checks(prj, tables, summary, mism):
                                 'd2_rows': len(ref), 'status': 'NOT RUN',
                                 'note': f'D2 interval {gi} m: silver has {defect} only at 100 m and 1 km'})
                 continue
-            if from_10m and table in tables:
-                lanes = sorted(prj.d4_long['lane'].unique())
-                per_lane = [_silver_bins(prj, tables, 'cracking', std, ln, g)['silver_breach'] for ln in lanes]
-                sil = (pd.concat(per_lane).groupby(level=0).max().map({1: 'Yes', 0: 'No', 1.0: 'Yes', 0.0: 'No'})
-                       if per_lane else pd.Series(dtype=object))
-                j = ref.join(sil.rename('silver'), on='bin')
-                ok = j['d2'] == j['silver']
-                summary.append(_row('failing_lanes', std, defect, '-', level, len(j), int(ok.sum()), skipped,
-                                    note=f"master_cracking 10 m rows averaged per {g} m: Yes when any lane breaches"))
-                for _, q in j[~ok].iterrows():
-                    mism.append({'check': 'failing_lanes', 'std': std, 'defect': defect, 'lane': '-', 'level': level,
-                                 'bin_start': int(q['bin']), 'd2_value': q['d2'], 'silver_value': q['silver'],
-                                 'diff': None, 'reason': 'no silver row for this block' if pd.isna(q['silver'])
-                                 else 'Failing Lanes differs'})
-                continue
             if table not in tables:
                 summary.append({**_row('failing_lanes', std, defect, '-', level, 0, 0, skipped),
                                 'd2_rows': len(ref), 'status': 'NOT RUN', 'note': f'{table} not in this run'})
                 continue
-            s = tables[table]
-            s = s[s['threshold_name'] == f'As per {std}']
-            bf = pd.to_numeric(s['breach_flag'], errors='coerce')
-            if bf.isna().all():
-                summary.append({**_row('failing_lanes', std, defect, '-', level, 0, 0, skipped),
-                                'd2_rows': len(ref), 'status': 'NO DATA',
-                                'note': f'{table}: breach_flag NULL (no D2 threshold)'})
-                continue
-            sil = (s.assign(_b=s['start_chainage'].astype('int64') // g * g, _bf=bf)
-                   .groupby('_b')['_bf'].max().map({1.0: 'Yes', 0.0: 'No'}))
+            # silver breach per lane and block (10 m rows averaged per D2 block, or the 100 m / 1 km table)
+            lanes = sorted(prj.d4_long['lane'].unique())
+            if from_10m:
+                per_lane = {ln: num(_silver_bins(prj, tables, 'cracking', std, ln, g)['silver_breach']) for ln in lanes}
+            else:
+                s = tables[table]
+                s = s[s['threshold_name'] == f'As per {std}']
+                bf = pd.to_numeric(s['breach_flag'], errors='coerce')
+                if bf.isna().all():
+                    summary.append({**_row('failing_lanes', std, defect, '-', level, 0, 0, skipped),
+                                    'd2_rows': len(ref), 'status': 'NO DATA',
+                                    'note': f'{table}: breach_flag NULL (no D2 threshold)'})
+                    continue
+                s = s.assign(_b=s['start_chainage'].astype('int64') // g * g, _bf=bf)
+                per_lane = {ln: grp.groupby('_b')['_bf'].max() for ln, grp in s.groupby('lane')}
+            # D2 built 'Failing Lanes' from its own lane values: a lane D2 lists end-to-start (value check) counts
+            # in D2's order here too
+            rev = sorted(ln for ln in per_lane if (std, defect, ln) in getattr(prj, '_dq_reversed_lanes', set()))
+            for ln in rev:
+                v = per_lane[ln].sort_index()
+                per_lane[ln] = pd.Series(v.to_numpy()[::-1], index=v.index)
+            sil = (pd.concat(per_lane.values()).groupby(level=0).max().map({1.0: 'Yes', 0.0: 'No'})
+                   if per_lane else pd.Series(dtype=object))
             j = ref.join(sil.rename('silver'), on='bin')
             ok = j['d2'] == j['silver']
-            summary.append(_row('failing_lanes', std, defect, '-', level, len(j), int(ok.sum()), skipped,
-                                note=f"{table}: Yes when any lane has breach_flag = 1 "
-                                     f"(D2 Yes {int((j['d2'] == 'Yes').sum()):,}, silver Yes {int((j['silver'] == 'Yes').sum()):,})"))
+            row = _row('failing_lanes', std, defect, '-', level, len(j), int(ok.sum()), skipped,
+                       note=(f"{'master_cracking 10 m rows averaged per ' + str(g) + ' m' if from_10m else table}: "
+                             f"Yes when any lane breaches (D2 Yes {int((j['d2'] == 'Yes').sum()):,}, "
+                             f"silver Yes {int((j['silver'] == 'Yes').sum()):,})"))
+            if rev:
+                row['note'] = f"lanes {', '.join(rev)} in D2's reversed order (see value checks). " + row['note']
+                if row['status'] == 'PASS':
+                    row['status'] = 'D2 REVERSED'
+            summary.append(row)
             for _, q in j[~ok].iterrows():
                 mism.append({'check': 'failing_lanes', 'std': std, 'defect': defect, 'lane': '-', 'level': level,
                              'bin_start': int(q['bin']), 'd2_value': q['d2'], 'silver_value': q['silver'],
@@ -291,6 +295,7 @@ def _value_and_breach_checks(prj, tables, summary, mism):
                 row['status'] = 'D2 REVERSED'          # not PASS / FAIL: D2 itself must be corrected by the vendor
             row['note'] = ('D2 lists this lane END-TO-START (reversed chainage order); compared reversed. '
                            + str(row.get('note') or ''))
+    prj._dq_reversed_lanes = reversed_lanes   # used by the failing-lanes check
     for std, defect, lane in sorted(reversed_lanes):
         print(f"  DQ: D2 {std} {defect} {lane} values are in reversed chainage order (vendor D2) - see dq_summary")
 
