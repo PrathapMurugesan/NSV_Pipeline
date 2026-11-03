@@ -98,8 +98,8 @@ def aggregate(n, bin_m, defect):
     a['_b'] = a['start_chainage'] // bin_m * bin_m
     g = a.groupby(['lane', '_b'], dropna=False).agg(_AGG).reset_index().rename(columns={'row_id': 'segment_count'})
     if defect == 'roughness':
-        lr = g['lwp_iri'].notna() & g['rwp_iri'].notna()
-        g.loc[lr, 'iri_value'] = (g.loc[lr, 'lwp_iri'] + g.loc[lr, 'rwp_iri']) / 2
+        # new structure: one IRI per lane (D4 'Roughness IRI @ 10 mtr'), no left / right wheel path.
+        # iri_value = average of the 10 m IRI of the block (groupby above)
         if config.ROUGHNESS_AGGREGATION == 'iri_formula':
             # average IRI, then BI = 630 × IRI^1.12 (how D2 is built)
             v = g['iri_value'].notna()

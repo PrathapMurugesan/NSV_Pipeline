@@ -58,6 +58,7 @@ UPC_DASH="$(echo "$UPC" | tr '/_ ' '---' | tr '[:lower:]' '[:upper:]')"
 
 mkdir -p "$ROOT/logs"
 LOG="$ROOT/logs/e2e_$(date +%Y%m%d_%H%M%S)_${UPC_DASH}.log"
+FINAL="$ROOT/logs/FINAL_${UPC_DASH}_$(date +%Y%m%d_%H%M%S).txt"
 exec > >(tee -a "$LOG") 2>&1
 
 echo "################################################################################"
@@ -87,9 +88,21 @@ summary() {
   echo "  silver: s3://${BUCKET}/${SILVER_PREFIX}/zone=${ZONE}/phase=${PHASE}/cycle=${CYCLE}/${UPC_DASH}/"
   echo "  gold  : s3://${BUCKET}/${GOLD_PREFIX}/zone=${ZONE}/phase=${PHASE}/cycle=${CYCLE}/${UPC_DASH}/"
   echo "  log   : ${LOG}"
-  if [[ -n "${PIPELINE_PREFIX:-}" ]]; then         # copy this run's log next to the layers
-    aws s3 cp "$LOG" "s3://${BUCKET}/${PIPELINE_PREFIX}/logs/$(basename "$LOG")" --region "$REGION" --only-show-errors \
-      && echo "          s3://${BUCKET}/${PIPELINE_PREFIX}/logs/$(basename "$LOG")"
+  # one report of the three layers, read back from S3 (logs/FINAL_<UPC>_<time>.txt) - this is the file to share
+  local status="" l
+  for l in "${LAYERS[@]}"; do status+="${l}=${STATUS[$l]:-not run};"; done
+  local rep
+  if rep=$("$PYTHON" "$ROOT/tools/e2e_report.py" --upc "$UPC" --zone "$ZONE" --phase "$PHASE" --cycle "$CYCLE" \
+             --status "$status" --out "$FINAL" 2>&1); then
+    echo "  final : ${FINAL}   <- the one file to share"
+  else
+    echo "  final : report not written:"; echo "$rep" | tail -5 | sed 's/^/          /'
+  fi
+  if [[ -n "${PIPELINE_PREFIX:-}" ]]; then         # copy this run's log + report next to the layers
+    for f in "$LOG" "$FINAL"; do
+      [[ -f "$f" ]] && aws s3 cp "$f" "s3://${BUCKET}/${PIPELINE_PREFIX}/logs/$(basename "$f")" --region "$REGION" \
+        --only-show-errors && echo "          s3://${BUCKET}/${PIPELINE_PREFIX}/logs/$(basename "$f")"
+    done
   fi
 }
 

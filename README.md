@@ -68,6 +68,9 @@ nohup ./run_e2e.sh --zone A --phase 2 --cycle 2 --upc N/02001/19004/DL > e2e.out
 | gold 0 / other | ok / failed (`gold_run.log` in S3) | done / **stop** |
 
 `--strict` turns the two "warn + continue" cases into stops. Log: `logs/e2e_<time>_<UPC>.log`.
+Report to share: `logs/FINAL_<UPC>_<time>.txt` (also in `NSV_Pipeline/logs/`): bronze status per sheet, silver
+tables / thresholds / intervals / DQ vs D2 with the mismatches, gold outputs. Built from S3 by `tools/e2e_report.py`;
+re-create it any time: `.venv/bin/python tools/e2e_report.py --upc N/02001/19004/DL --zone A --phase 2 --cycle 2 --out x.txt`.
 
 ## Known limits
 
