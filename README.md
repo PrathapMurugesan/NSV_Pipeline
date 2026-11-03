@@ -40,7 +40,7 @@ The raw download is in another bucket (`nhai-dhms-uat/nsv-dowloads-raw/…`), so
 Ubuntu:
 ```bash
 sudo apt update && sudo apt install -y git python3-venv tesseract-ocr awscli    # 24.04: sudo snap install aws-cli --classic
-git clone <repo-url> nsv-e2e-pipeline && cd nsv-e2e-pipeline
+git clone https://github.com/PrathapMurugesan/NSV_Pipeline.git && cd NSV_Pipeline
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 chmod +x run_e2e.sh bronze/run_bronze_s3.sh silver/run_silver_s3.sh gold/run_gold_s3.sh
 ```
