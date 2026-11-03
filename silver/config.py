@@ -101,7 +101,8 @@ CRACK_IMAGE_TOLERANCE_M = 5.0
 #   breach_flag = 0 when the pothole's SEVERITY starts with one of these words (case-insensitive), else 1.
 #   Only the severity column is used (not type of defect). Blank severity → 1 (a recorded pothole).
 #   road_condition comes ONLY from breach_flag: 1 → POTHOLE_ROAD_CONDITION[1], 0 → POTHOLE_ROAD_CONDITION[0].
-POTHOLE_NO_BREACH_SEVERITY = ['low', 'delamination']
+#   Same set as the DLM notebook (POTHOLE_NON_BREACH_SEVERITIES: low, delamination, very low, none).
+POTHOLE_NO_BREACH_SEVERITY = ['low', 'delamination', 'very low', 'none']
 POTHOLE_ROAD_CONDITION = {1: 'Bad', 0: 'Good'}
 
 # ── DQ checks against D2 ─────────────────────────────────────────────────────

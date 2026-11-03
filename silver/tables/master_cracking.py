@@ -33,20 +33,27 @@ LEVEL = 'child_10m'
 
 
 def _aggregate(s, bin_m):
-    """10 m cracking rows → one row per lane per block of bin_m metres:
-       cracking % = average of the available 10 m % (as D2), sq m = total (all blank → blank),
-       length = sum of the 10 m lengths, total_children = number of 10 m rows."""
+    """10 m cracking rows → one row per lane per block of bin_m metres (DLM notebook build_cracking_agg_pdf):
+       cracking % = total crack sq m of the block ÷ (lane width 3.5 m × covered length) × 100, covered length =
+       last end − first start of the block's rows. Not the mean of the 10 m %: a short first / last row or a missing
+       10 m row would weigh the same as a full one. A row with a % but no sq m counts % × 3.5 × its length ÷ 100;
+       a blank row counts 0 inside the covered length; no value at all in the block → blank.
+       sq m = total (all blank → blank), length = sum of the 10 m lengths, total_children = number of 10 m rows."""
     a = s.copy()
     a['_b'] = a['start'].astype('int64') // bin_m * bin_m
     a['_len'] = (a['end'] - a['start']).astype(float)
+    width = config.LANE_AREA_SQM / config.CHILD_10M                    # 3.5 m (35 sq m per 10 m)
+    a['_area'] = a['crack_sqm'].where(a['crack_sqm'].notna(), a['crack_pct'] * width * a['_len'] / 100.0)
     g = a.groupby(['lane', '_b'], dropna=False).agg(
-        start=('start', 'min'), end=('end', 'max'), crack_pct=('crack_pct', 'mean'),
+        start=('start', 'min'), end=('end', 'max'), _area=('_area', lambda x: x.sum(min_count=1)),
         crack_sqm=('crack_sqm', lambda x: x.sum(min_count=1)), length=('_len', 'sum'), children=('start', 'size'),
         start_lat=('start_lat', 'first'), start_long=('start_long', 'first'),
         end_lat=('end_lat', 'last'), end_long=('end_long', 'last'),
         nh_number=('nh_number', 'first'), datetime=('datetime', 'first'), source=('source', 'first')).reset_index()
+    covered = (g['end'] - g['start']).astype(float)
+    g['crack_pct'] = (g['_area'] * 100.0 / (width * covered)).where(covered > 0)
     g['image_name'] = None                     # image names belong to the 10 m rows only
-    return g.drop(columns=['_b'])
+    return g.drop(columns=['_b', '_area'])
 
 
 def level_rows(prj, level):

@@ -112,9 +112,11 @@ def aggregate(n, bin_m, defect):
 
 
 def _ravelling_pct_from_sqm(g, block_m):
-    """Ravelling % of a block = total affected sq m × 100 ÷ block lane area (10 m 35, 100 m 350, 1 km 3,500).
+    """Ravelling % of a block = total affected sq m × 100 ÷ lane area of the block (3.5 m × its surveyed length:
+    full blocks 100 m 350, 1 km 3,500; the road's last, shorter block its real length, as the DLM notebook).
     Not the mean of the 10 m percentages. All-blank sq m → blank %."""
-    denom = config.LANE_AREA_SQM * block_m / config.CHILD_10M
+    length = pd.to_numeric(g['length_m'], errors='coerce') if 'length_m' in g else pd.Series(np.nan, index=g.index)
+    denom = (config.LANE_AREA_SQM / config.CHILD_10M) * length.where(length > 0, block_m)
     g['ravelling_area'] = g['ravelling_area_sqm'] * 100.0 / denom
     g['metric_value'] = g['ravelling_area']
     return g

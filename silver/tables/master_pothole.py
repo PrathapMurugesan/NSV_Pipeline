@@ -4,7 +4,7 @@ master_pothole
   No defect-report fallback. threshold_value NULL (no pothole threshold in D2; breach comes from severity).
   rating_ca / rating_irc: D4 defect report 'Visual Condition - Pothole (CA)' / '(IRC)', same lane + 10 m segment.
   No CA/IRC twin. parent_* = its 1 km block (DLM notebook).
-  breach_flag = 0 when SEVERITY is in config.POTHOLE_NO_BREACH_SEVERITY (Low, Delamination), else 1.
+  breach_flag = 0 when SEVERITY is in config.POTHOLE_NO_BREACH_SEVERITY (Low, Delamination, Very Low, None), else 1.
   road_condition = Bad / Good from breach_flag only (set in finalize).
   affected_length(_ca/_irc) and total_length = the pothole area as read (not tied to breach_flag).
 Run alone:  python tables/master_pothole.py [--no-excel]
