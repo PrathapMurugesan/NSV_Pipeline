@@ -1,0 +1,13 @@
+header,excel_column,aliases
+NHNumber,,
+SectionCode,,
+StartChainage,,
+EndChainage,,
+Direction,,
+MedianType,,
+MedianWidth,,
+KerbHeight,,
+ConstructionYear,,
+SurveyDate,,
+Latitude,,
+Longitude,,

@@ -1,0 +1,6 @@
+header,excel_column,value_type,aliases
+Lane,A,text,
+Start Chainage,B,number,
+End Chainage,C,number,
+Length (m),D,number,
+Remarks,E,text,

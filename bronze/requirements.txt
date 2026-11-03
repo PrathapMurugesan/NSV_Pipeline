@@ -1,0 +1,7 @@
+# tested with: Python 3.12 / pandas 3.0 / pyarrow 26  and  pandas 2.1 / numpy 1.26 / pyarrow 15
+pandas>=2.0
+openpyxl>=3.1
+pyarrow>=14
+Pillow>=9.0          # survey images (EXIF, OCR preparation)
+pytesseract>=0.3     # OCR - ALSO needs the tesseract program installed (see settings.py, section 8)
+boto3>=1.28          # S3 input (run_download.py --root s3://...) / output (NSV_OUTPUT=s3://...)

@@ -1,0 +1,6 @@
+# Covers all three pipelines (each code_* folder also has its own requirements.txt)
+pandas>=2.2
+numpy
+pyarrow
+openpyxl
+python-dotenv

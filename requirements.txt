@@ -1,0 +1,11 @@
+# One environment for bronze + silver + gold (each folder keeps its own requirements.txt too).
+# Python 3.11+. Bronze OCR also needs the tesseract program: sudo apt install -y tesseract-ocr
+pandas>=2.2
+numpy>=1.24
+pyarrow>=14
+openpyxl>=3.1
+xlsxwriter>=3.0
+python-dotenv
+Pillow>=9.0
+pytesseract>=0.3
+boto3>=1.28

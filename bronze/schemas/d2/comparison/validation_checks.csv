@@ -1,0 +1,9 @@
+header,excel_column,value_type,aliases
+Section,I,text,
+Check ID,J,text,
+Check Description,K,text,
+Sheet,L,text,
+Status,M,text,
+Severity,N,text,
+Detail,O,text,
+Last Run,P,date,

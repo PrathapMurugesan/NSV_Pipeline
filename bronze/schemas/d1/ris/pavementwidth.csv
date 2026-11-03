@@ -1,0 +1,11 @@
+header,excel_column,aliases
+NHNumber,,
+SectionCode,,
+StartChainage,,
+EndChainage,,
+Direction,,
+PavementWidth,,
+PavementWidthValue,,
+SurveyDate,,
+Latitude,,
+Longitude,,

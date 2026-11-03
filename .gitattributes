@@ -1,0 +1,9 @@
+# LF everywhere, so the .sh scripts run on the EC2 (Linux) checkout even when committed from Windows
+* text=auto eol=lf
+*.sh text eol=lf
+*.env text eol=lf
+
+*.xlsx binary
+*.xlsm binary
+*.parquet binary
+*.ipynb text eol=lf

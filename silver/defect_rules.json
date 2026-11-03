@@ -1,0 +1,420 @@
+{
+  "_help": [
+    "Thresholds come ONLY from D2 (Inputs (Thresholds) json → D2 header json → D2 limit column). There are no default thresholds: no D2 threshold → threshold_value / breach_flag / road_condition NULL and the DQ 'threshold' check FAILs for that defect + standard.",
+    "All Good / Fair / Poor ranges and label texts used by the silver layer (thresholds come from D2). Edit here; no code change.",
+    "  operator ('>' or '>=') is the breach_flag operator when D2 'Inputs (Thresholds)' column B gives none.",
+    "  Classification ranges never change the breach operator.",
+    "severity_ranges: CALCULATE severity where D4 has no Visual Condition (10 m) and at 100 m / 1 km (from the aggregated value).",
+    "rating_ranges: CALCULATE rating_ca (CA ranges + CA threshold) and rating_irc (IRC ranges + IRC threshold) at every level,",
+    "rating_ca / rating_irc: 10 m → D4 Visual Condition (CA → rating_ca, IRC → rating_irc) as it is; if D4 has none → calculated. 100 m → calculated from the aggregated 10 m values; 1 km → calculated from the aggregated 100 m values. Threshold = D2 of that standard only (no defaults; not in D2 → calculated label NULL). Rutting, roughness, ravelling, cracking.",
+    "  from that level's own value (10 m value; 100 m / 1 km aggregated value).",
+    "Band format (checked in order, first match wins):",
+    "  'to' = fixed upper limit, or 'to_ratio' = ratio × threshold of that standard; 'round': true rounds that limit (old notebook);",
+    "  'to_inclusive': true → value <= limit, else value < limit; the last band has no limit.",
+    "  'text' = label written to the table; {from} = previous band's limit, {to} = this band's limit (old notebook style 'Good (<10mm)').",
+    "Boundaries follow the old notebook: rutting / roughness Fair <= T, Poor > T; ravelling Fair < T, Poor >= T.",
+    "Values: rutting mm, roughness BI mm/km (never IRI m/km), ravelling % of the 35 sq m lane (area sq m × 100 / 35).",
+    "project_overrides: { '<UPC folder or UPC>': { any section above } } is merged over these settings for that project only.",
+    "_source fields say where each number comes from."
+  ],
+  "severity_ranges": {
+    "_source": "Label sets from the D4 data dictionary: Visual Condition CA = 'Good/Poor', IRC = 'Good/Fair/Poor'. Boundaries per old notebook (Good/Fair <= T, Poor > T). IRC rutting Good < round(0.5T); IRC roughness Good < 2000 BI mm/km (D4). Ravelling: existing ravelling rule for CA and IRC with each standard's threshold. Cracking: same 5 bands as its rating (old notebook crack_condition_from_pct: T, 2T, 4T, 6T), per standard (CA bands × CA threshold, IRC bands × IRC threshold).",
+    "rutting": {
+      "ca": [
+        {
+          "label": "Good",
+          "to_ratio": 1.0,
+          "to_inclusive": true,
+          "text": "Good (<={to}mm)"
+        },
+        {
+          "label": "Poor",
+          "text": "Poor (>{from}mm)"
+        }
+      ],
+      "irc": [
+        {
+          "label": "Good",
+          "to_ratio": 0.5,
+          "round": true,
+          "text": "Good (<{to}mm)"
+        },
+        {
+          "label": "Fair",
+          "to_ratio": 1.0,
+          "to_inclusive": true,
+          "text": "Fair ({from}-{to}mm)"
+        },
+        {
+          "label": "Poor",
+          "text": "Poor (>{from}mm)"
+        }
+      ]
+    },
+    "roughness": {
+      "ca": [
+        {
+          "label": "Good",
+          "to_ratio": 1.0,
+          "to_inclusive": true,
+          "text": "Good (<={to}mm/km)"
+        },
+        {
+          "label": "Poor",
+          "text": "Poor (>{from}mm/km)"
+        }
+      ],
+      "irc": [
+        {
+          "label": "Good",
+          "to": 2000,
+          "text": "Good (<{to}mm/km)",
+          "_unit": "BI mm/km (D4 Visual Condition IRC)"
+        },
+        {
+          "label": "Fair",
+          "to_ratio": 1.0,
+          "to_inclusive": true,
+          "text": "Fair ({from}-{to}mm/km)"
+        },
+        {
+          "label": "Poor",
+          "text": "Poor (>{from}mm/km)"
+        }
+      ]
+    },
+    "ravelling": {
+      "ca": [
+        {
+          "label": "Very Good",
+          "to": 0,
+          "to_inclusive": true,
+          "text": "Very Good (0)"
+        },
+        {
+          "label": "Good",
+          "to_ratio": 0.5,
+          "round": true,
+          "to_inclusive": true,
+          "text": "Good (1-{to}%)"
+        },
+        {
+          "label": "Fair",
+          "to_ratio": 1.0,
+          "text": "Fair ({from}-{to}%)"
+        },
+        {
+          "label": "Poor",
+          "text": "Poor (>={from}%)"
+        }
+      ],
+      "irc": [
+        {
+          "label": "Very Good",
+          "to": 0,
+          "to_inclusive": true,
+          "text": "Very Good (0)"
+        },
+        {
+          "label": "Good",
+          "to_ratio": 0.5,
+          "round": true,
+          "to_inclusive": true,
+          "text": "Good (1-{to}%)"
+        },
+        {
+          "label": "Fair",
+          "to_ratio": 1.0,
+          "text": "Fair ({from}-{to}%)"
+        },
+        {
+          "label": "Poor",
+          "text": "Poor (>={from}%)"
+        }
+      ]
+    },
+    "cracking": {
+      "ca": [
+        {
+          "label": "Very Good",
+          "to_ratio": 1.0,
+          "text": "Very Good (<{to}%)"
+        },
+        {
+          "label": "Good",
+          "to_ratio": 2.0,
+          "round": true,
+          "to_inclusive": true,
+          "text": "Good ({from}-{to}%)"
+        },
+        {
+          "label": "Fair",
+          "to_ratio": 4.0,
+          "round": true,
+          "to_inclusive": true,
+          "text": "Fair ({from}-{to}%)"
+        },
+        {
+          "label": "Poor",
+          "to_ratio": 6.0,
+          "round": true,
+          "to_inclusive": true,
+          "text": "Poor ({from}-{to}%)"
+        },
+        {
+          "label": "Very Poor",
+          "text": "Very Poor (>{from}%)"
+        }
+      ],
+      "irc": [
+        {
+          "label": "Very Good",
+          "to_ratio": 1.0,
+          "text": "Very Good (<{to}%)"
+        },
+        {
+          "label": "Good",
+          "to_ratio": 2.0,
+          "round": true,
+          "to_inclusive": true,
+          "text": "Good ({from}-{to}%)"
+        },
+        {
+          "label": "Fair",
+          "to_ratio": 4.0,
+          "round": true,
+          "to_inclusive": true,
+          "text": "Fair ({from}-{to}%)"
+        },
+        {
+          "label": "Poor",
+          "to_ratio": 6.0,
+          "round": true,
+          "to_inclusive": true,
+          "text": "Poor ({from}-{to}%)"
+        },
+        {
+          "label": "Very Poor",
+          "text": "Very Poor (>{from}%)"
+        }
+      ]
+    }
+  },
+  "rating_ranges": {
+    "_source": "Old DLM notebook rating functions — rutting_condition_from_mm: Good < round(0.5T), Fair <= T, Poor > T; roughness_condition_from_metrics (BI): Good < round(0.8T), Fair <= T, Poor > T; ravelling_condition_from_pct: Very Good = 0, Good <= round(0.5T), Fair < T, Poor >= T. Same structure for IRC with the IRC threshold, except roughness IRC Good < 2000 BI mm/km taken from D4 Visual Condition (IRC). Cracking: old notebook crack_condition_from_pct — Very Good < T, Good <= round(2T), Fair <= round(4T), Poor <= round(6T), Very Poor > round(6T) — with the CA or IRC threshold.",
+    "rutting": {
+      "ca": [
+        {
+          "label": "Good",
+          "to_ratio": 0.5,
+          "round": true,
+          "text": "Good (<{to}mm)"
+        },
+        {
+          "label": "Fair",
+          "to_ratio": 1.0,
+          "to_inclusive": true,
+          "text": "Fair ({from}-{to}mm)"
+        },
+        {
+          "label": "Poor",
+          "text": "Poor (>{from}mm)"
+        }
+      ],
+      "irc": [
+        {
+          "label": "Good",
+          "to_ratio": 0.5,
+          "round": true,
+          "text": "Good (<{to}mm)"
+        },
+        {
+          "label": "Fair",
+          "to_ratio": 1.0,
+          "to_inclusive": true,
+          "text": "Fair ({from}-{to}mm)"
+        },
+        {
+          "label": "Poor",
+          "text": "Poor (>{from}mm)"
+        }
+      ]
+    },
+    "roughness": {
+      "ca": [
+        {
+          "label": "Good",
+          "to_ratio": 0.8,
+          "round": true,
+          "text": "Good (<{to}mm/km)"
+        },
+        {
+          "label": "Fair",
+          "to_ratio": 1.0,
+          "to_inclusive": true,
+          "text": "Fair ({from}-{to}mm/km)"
+        },
+        {
+          "label": "Poor",
+          "text": "Poor (>{from}mm/km)"
+        }
+      ],
+      "irc": [
+        {
+          "label": "Good",
+          "to": 2000,
+          "text": "Good (<{to}mm/km)",
+          "_unit": "BI mm/km (D4 Visual Condition IRC)"
+        },
+        {
+          "label": "Fair",
+          "to_ratio": 1.0,
+          "to_inclusive": true,
+          "text": "Fair ({from}-{to}mm/km)"
+        },
+        {
+          "label": "Poor",
+          "text": "Poor (>{from}mm/km)"
+        }
+      ]
+    },
+    "ravelling": {
+      "ca": [
+        {
+          "label": "Very Good",
+          "to": 0,
+          "to_inclusive": true,
+          "text": "Very Good (0)"
+        },
+        {
+          "label": "Good",
+          "to_ratio": 0.5,
+          "round": true,
+          "to_inclusive": true,
+          "text": "Good (1-{to}%)"
+        },
+        {
+          "label": "Fair",
+          "to_ratio": 1.0,
+          "text": "Fair ({from}-{to}%)"
+        },
+        {
+          "label": "Poor",
+          "text": "Poor (>={from}%)"
+        }
+      ],
+      "irc": [
+        {
+          "label": "Very Good",
+          "to": 0,
+          "to_inclusive": true,
+          "text": "Very Good (0)"
+        },
+        {
+          "label": "Good",
+          "to_ratio": 0.5,
+          "round": true,
+          "to_inclusive": true,
+          "text": "Good (1-{to}%)"
+        },
+        {
+          "label": "Fair",
+          "to_ratio": 1.0,
+          "text": "Fair ({from}-{to}%)"
+        },
+        {
+          "label": "Poor",
+          "text": "Poor (>={from}%)"
+        }
+      ]
+    },
+    "cracking": {
+      "ca": [
+        {
+          "label": "Very Good",
+          "to_ratio": 1.0,
+          "text": "Very Good (<{to}%)"
+        },
+        {
+          "label": "Good",
+          "to_ratio": 2.0,
+          "round": true,
+          "to_inclusive": true,
+          "text": "Good ({from}-{to}%)"
+        },
+        {
+          "label": "Fair",
+          "to_ratio": 4.0,
+          "round": true,
+          "to_inclusive": true,
+          "text": "Fair ({from}-{to}%)"
+        },
+        {
+          "label": "Poor",
+          "to_ratio": 6.0,
+          "round": true,
+          "to_inclusive": true,
+          "text": "Poor ({from}-{to}%)"
+        },
+        {
+          "label": "Very Poor",
+          "text": "Very Poor (>{from}%)"
+        }
+      ],
+      "irc": [
+        {
+          "label": "Very Good",
+          "to_ratio": 1.0,
+          "text": "Very Good (<{to}%)"
+        },
+        {
+          "label": "Good",
+          "to_ratio": 2.0,
+          "round": true,
+          "to_inclusive": true,
+          "text": "Good ({from}-{to}%)"
+        },
+        {
+          "label": "Fair",
+          "to_ratio": 4.0,
+          "round": true,
+          "to_inclusive": true,
+          "text": "Fair ({from}-{to}%)"
+        },
+        {
+          "label": "Poor",
+          "to_ratio": 6.0,
+          "round": true,
+          "to_inclusive": true,
+          "text": "Poor ({from}-{to}%)"
+        },
+        {
+          "label": "Very Poor",
+          "text": "Very Poor (>{from}%)"
+        }
+      ]
+    }
+  },
+  "project_overrides": {
+    "_example": {
+      "rating_ranges": {
+        "roughness": {
+          "irc": [
+            {
+              "label": "Good",
+              "to": 1800
+            },
+            {
+              "label": "Fair",
+              "to_ratio": 1.0,
+              "to_inclusive": true
+            },
+            {
+              "label": "Poor"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

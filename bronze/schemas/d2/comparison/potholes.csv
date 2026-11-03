@@ -1,0 +1,8 @@
+header,excel_column,value_type,aliases
+NH No.,A,text,
+Chainage (m),B,number,
+Lane No.,C,text,
+Area (in Sq m),D,number,
+Max Depth (in mm),E,number,
+Average Depth (in mm),F,number,
+Severity,G,text,

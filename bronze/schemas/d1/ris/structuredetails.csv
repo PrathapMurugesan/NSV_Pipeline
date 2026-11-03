@@ -1,0 +1,16 @@
+header,excel_column,aliases
+NHNumber,,
+SectionCode,,
+Chainage (Start),,StartChainage
+Chainage (End),,EndChainage
+Direction,,
+Structure Type,,
+SurveyDate,,
+DataSource,,
+Remarks,,
+Start_Latitude,,
+Start_Longitude,,
+Start_Altitude,,
+End_Latitude,,
+End_Longitude,,
+End_Altitude,,
