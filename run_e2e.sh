@@ -87,6 +87,10 @@ summary() {
   echo "  silver: s3://${BUCKET}/${SILVER_PREFIX}/zone=${ZONE}/phase=${PHASE}/cycle=${CYCLE}/${UPC_DASH}/"
   echo "  gold  : s3://${BUCKET}/${GOLD_PREFIX}/zone=${ZONE}/phase=${PHASE}/cycle=${CYCLE}/${UPC_DASH}/"
   echo "  log   : ${LOG}"
+  if [[ -n "${PIPELINE_PREFIX:-}" ]]; then         # copy this run's log next to the layers
+    aws s3 cp "$LOG" "s3://${BUCKET}/${PIPELINE_PREFIX}/logs/$(basename "$LOG")" --region "$REGION" --only-show-errors \
+      && echo "          s3://${BUCKET}/${PIPELINE_PREFIX}/logs/$(basename "$LOG")"
+  fi
 }
 
 stop() { STATUS[$1]="${STATUS[$1]} - $2"; summary; exit "$3"; }

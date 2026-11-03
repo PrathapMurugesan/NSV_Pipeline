@@ -4,11 +4,11 @@ One UPC at a time, S3 in → S3 out, the three layers run one after the other on
 
 | # | Layer | Code | Reads | Writes |
 |---|---|---|---|---|
-| 1 | Bronze | [bronze/](bronze/README.md) `run_bronze_s3.sh` | raw vendor download `RAW_S3_ROOT/Zone A/Phase 2/Cycle 2/<UPC>/Deliverable 1..4` | `s3://dhms-new-stgae/nsv_extraction_new/bronze/nsv/<part>/d1..d4/run=<time>/` |
-| 2 | Silver | [silver/](silver/README.md) `run_silver_s3.sh` | bronze, newest `run=` per deliverable | `s3://dhms-new-stgae/nsv-silver/<part>/dlm_kpi/ dlm_postgres/ dq/ run.log` |
-| 3 | Gold | [gold/](gold/README.md) `run_gold_s3.sh` | silver `dlm_kpi/*.parquet` + project master | `s3://dhms-new-stgae/nsv-gold/<part>/ris_trends_dw.csv final_intermediate.csv ris_view_dw.csv gold_run.log` |
+| 1 | Bronze | [bronze/](bronze/README.md) `run_bronze_s3.sh` | raw vendor download `RAW_S3_ROOT/Zone A/Phase 2/Cycle 2/<UPC>/Deliverable 1..4` | `s3://dhms-new-stgae/NSV_Pipeline/bronze/nsv/<part>/d1..d4/run=<time>/` |
+| 2 | Silver | [silver/](silver/README.md) `run_silver_s3.sh` | bronze, newest `run=` per deliverable | `s3://dhms-new-stgae/NSV_Pipeline/silver/<part>/dlm_kpi/ dlm_postgres/ dq/ run.log` |
+| 3 | Gold | [gold/](gold/README.md) `run_gold_s3.sh` | silver `dlm_kpi/*.parquet` + project master | `s3://dhms-new-stgae/NSV_Pipeline/gold/<part>/ris_trends_dw.csv final_intermediate.csv ris_view_dw.csv gold_run.log` |
 
-`<part>` = `zone=A/phase=2/cycle=2/N-02001-19004-DL`. All S3 locations are set in [pipeline.env](pipeline.env).
+`<part>` = `zone=A/phase=2/cycle=2/N-02001-19004-DL`. All S3 locations are set in [pipeline.env](pipeline.env). The run log goes to `NSV_Pipeline/logs/`.
 
 The layer code is unchanged apart from env overrides in `silver/run_silver_s3.sh`. Each wrapper script stages S3 data:
 - **Bronze** already reads S3 (`run_download.py --root s3://…`) and writes S3 (`NSV_OUTPUT=s3://…`).
@@ -26,9 +26,7 @@ The layer code is unchanged apart from env overrides in `silver/run_silver_s3.sh
     { "Effect": "Allow", "Action": ["s3:ListBucket"], "Resource": "arn:aws:s3:::dhms-new-stgae" },
     { "Effect": "Allow", "Action": ["s3:GetObject"],  "Resource": "arn:aws:s3:::dhms-new-stgae/*" },
     { "Effect": "Allow", "Action": ["s3:PutObject"],  "Resource": [
-        "arn:aws:s3:::dhms-new-stgae/nsv_extraction_new/*",
-        "arn:aws:s3:::dhms-new-stgae/nsv-silver/*",
-        "arn:aws:s3:::dhms-new-stgae/nsv-gold/*" ] }
+        "arn:aws:s3:::dhms-new-stgae/NSV_Pipeline/*" ] }
   ]
 }
 ```
@@ -47,8 +45,9 @@ chmod +x run_e2e.sh bronze/run_bronze_s3.sh silver/run_silver_s3.sh gold/run_gol
 Amazon Linux 2023: `sudo dnf install -y git python3.11 tesseract` and `python3.11 -m venv .venv`.
 
 `pipeline.env` already holds the raw root (`RAW_S3_ROOT`, the `$SRC` of the earlier bronze runs) and the bronze
-output `nsv_extraction_new`. Set `PROJECT_MASTER_S3` and, optionally, `TRACKER_S3`.
-Bronze is read from **`nsv_extraction_new`**, not the old `nsv-extraction`. In the old prefix, the CA comparison
+output folder `NSV_Pipeline/`, and the project master
+(`s3://dhms-new-stgae/nsv_extraction_new/master/project_master.xlsx`). `TRACKER_S3` is optional.
+Never point bronze at the old `nsv-extraction` prefix. In the old prefix, the CA comparison
 table of N/02001/19004/DL was rejected, so silver had no CA reporting intervals.
 
 ## 3. Run
@@ -75,4 +74,4 @@ nohup ./run_e2e.sh --zone A --phase 2 --cycle 2 --upc N/02001/19004/DL > e2e.out
 - **Gold needs a non-empty silver table for every input.** Silver writes no file for an empty table. Gold then
   stops (exit 4) and lists the missing tables. For example, a UPC with no NHAI One pothole sheet has no `master_pothole`.
 - **No project master** means `ris_view` is skipped and gold runs only `ris_trends` + `intermediate`, unfiltered.
-- **Gold is per UPC.** Its CSVs cover only that UPC. Combining all UPCs means concatenating each `nsv-gold/**` CSV.
+- **Gold is per UPC.** Its CSVs cover only that UPC. Combining all UPCs means concatenating each `NSV_Pipeline/gold/**` CSV.
