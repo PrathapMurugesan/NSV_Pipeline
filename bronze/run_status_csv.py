@@ -174,6 +174,7 @@ def main(args):
     results = []
     parallel = max(1, o.parallel)
     image_workers = max(1, (os.cpu_count() or 1) // parallel)       # the cores are shared by the parallel UPCs
+    image_workers = int(os.environ.get("NSV_IMAGE_WORKERS") or image_workers)   # export NSV_IMAGE_WORKERS wins
     print(f"{parallel} UPC(s) at a time, {image_workers} image worker(s) each")
     with ThreadPoolExecutor(max_workers=parallel) as pool:
         jobs = {pool.submit(run_one, s, o.root, extra, log_dir, image_workers): s for s in surveys}
