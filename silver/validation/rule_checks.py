@@ -5,7 +5,8 @@ Expected values are recomputed here INDEPENDENTLY from D4 and the old-notebook f
 pipeline's own functions), then compared row by row with the written tables:
   source_value      10 m metric = D4 value (rutting mm, BI = 630 × IRI^1.12 or D4 BI when IRI is blank,
                     ravelling area × 100 / 35); 100 m / 1 km = mean of the 10 m / 100 m values, except
-                    ravelling % = total sq m × 100 ÷ 350 (100 m) / 3,500 (1 km). Blank stays blank.
+                    ravelling % = total sq m × 100 ÷ (3.5 m × surveyed length: 350 for 100 m, 3,500 for 1 km;
+                    the road's last, shorter block its real length). Blank stays blank.
   threshold_value   = D2 threshold of the row's standard (no defaults; not in D2 → NULL)
   breach_flag       = metric_value vs threshold_value with the standard's operator (default >=); no D2 threshold → NULL
   road_condition    = Poor if breach_flag = 1 else Good; NULL when metric_value or breach_flag is blank
@@ -66,7 +67,8 @@ def exp_severity_calc(defect, std, v, t):
 def _expected_metric(prj, defect, level):
     """Independent recomputation of metric_value (and ravelling sq m) per (lane, block start)."""
     d4 = prj.d4_long
-    x = d4[['lane', 'start_chainage', 'rut', 'iri', 'bi', 'rav_area']].copy()     # every row, blanks included
+    x = d4[['lane', 'start_chainage', 'end_chainage', 'rut', 'iri', 'bi', 'rav_area']].copy()   # every row, blanks included
+    x['len'] = (x['end_chainage'].astype(float) - x['start_chainage'].astype(float)).abs()   # surveyed length of the row
     if defect == 'rutting':
         x['m'] = x['rut']
     elif defect == 'roughness':
@@ -80,25 +82,26 @@ def _expected_metric(prj, defect, level):
     import config
     # 100 m = mean of the 10 m values; 1 km = mean of the 100 m values (sq m: sums)
     x['b100'] = x['start_chainage'].astype('int64') // 100 * 100
-    a100 = x.groupby(['lane', 'b100']).agg(m=('m', 'mean'), iri=('iri', 'mean'),
+    a100 = x.groupby(['lane', 'b100']).agg(m=('m', 'mean'), iri=('iri', 'mean'), ln=('len', 'sum'),
                                            sqm=('rav_area', lambda s: s.sum(min_count=1))).reset_index()
     if defect == 'roughness' and config.ROUGHNESS_AGGREGATION == 'iri_formula':
         a100['m'] = (630.0 * a100['iri'] ** 1.12).fillna(a100['m'])      # no IRI in block → mean of D4 BI
     if defect == 'ravelling':
-        a100['m'] = a100['sqm'] * 100.0 / 350.0
+        a100['m'] = a100['sqm'] * 100.0 / (3.5 * a100['ln'])          # 3.5 m × surveyed length (350 for 100 m)
     if level == 'child_100m':
         return a100.rename(columns={'b100': 'blk'}).set_index(['lane', 'blk'])[['m', 'sqm']], x
     if config.PARENT_AGGREGATION == 'from_10m':          # 1 km = average of all 10 m values in the km
         x['blk'] = x['start_chainage'].astype('int64') // 1000 * 1000
-        a1k = x.groupby(['lane', 'blk']).agg(m=('m', 'mean'), iri=('iri', 'mean'),
+        a1k = x.groupby(['lane', 'blk']).agg(m=('m', 'mean'), iri=('iri', 'mean'), ln=('len', 'sum'),
                                              sqm=('rav_area', lambda s: s.sum(min_count=1)))
     else:                                                 # 1 km = average of the 100 m averages
         a100['blk'] = a100['b100'] // 1000 * 1000
-        a1k = a100.groupby(['lane', 'blk']).agg(m=('m', 'mean'), iri=('iri', 'mean'), sqm=('sqm', lambda s: s.sum(min_count=1)))
+        a1k = a100.groupby(['lane', 'blk']).agg(m=('m', 'mean'), iri=('iri', 'mean'), ln=('ln', 'sum'),
+                                                sqm=('sqm', lambda s: s.sum(min_count=1)))
     if defect == 'roughness' and config.ROUGHNESS_AGGREGATION == 'iri_formula':
         a1k['m'] = (630.0 * a1k['iri'] ** 1.12).fillna(a1k['m'])
     if defect == 'ravelling':
-        a1k['m'] = a1k['sqm'] * 100.0 / 3500.0
+        a1k['m'] = a1k['sqm'] * 100.0 / (3.5 * a1k['ln'])            # 3.5 m × surveyed length (3,500 for 1 km)
     return a1k[['m', 'sqm']], x
 
 
@@ -255,8 +258,8 @@ def cross_level_check(prj, tables_by_name):
         for name in ['As per CA', 'As per IRC']:
             cc = c[c['threshold_name'] == name].assign(km=lambda z: z['start_chainage'].astype('int64') // 1000 * 1000)
             grp = cc.groupby(['lane', 'km'])
-            if d == 'ravelling':          # 1 km % = total sq m × 100 ÷ 3,500
-                exp = grp['ravelling_area_sqm'].sum(min_count=1) * 100.0 / 3500.0
+            if d == 'ravelling':          # 1 km % = total sq m × 100 ÷ (3.5 m × surveyed length; 3,500 for a full km)
+                exp = grp['ravelling_area_sqm'].sum(min_count=1) * 100.0 / (3.5 * grp['length_m'].sum())
             elif d == 'roughness' and config.ROUGHNESS_AGGREGATION == 'iri_formula':
                 exp = (630.0 * grp['iri_value'].mean() ** 1.12).fillna(grp['metric_value'].mean())
             else:

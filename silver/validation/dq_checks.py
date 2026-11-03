@@ -158,8 +158,12 @@ def _crack_checks(prj, tables, summary, mism, std, lane, ref, skipped, gi=100):
                             'note': f'D2 interval {gi} m does not fit in {table} blocks of {g} m'})
             continue
         r = ref.assign(bin=(ref['ch'] // g * g).astype('int64'))
-        if g > gi:                            # D2 has no block this size: average of its blocks inside it
-            r = r.groupby('bin', as_index=False)['d2'].mean()
+        if g > gi:                            # D2 has no block this size: average of its blocks inside it,
+            # weighted by each block's length (first / last block of a road is shorter, e.g. 50 m or 11 m)
+            w = r['len'].where(r['len'] > 0, gi) if 'len' in r else pd.Series(float(gi), index=r.index)
+            r = (r.assign(_w=w, _wd=r['d2'] * w).groupby('bin', as_index=False)
+                 .agg(_wd=('_wd', 'sum'), _w=('_w', 'sum')))
+            r['d2'] = r['_wd'] / r['_w']
         j = r.join(_silver_bins(prj, tables, 'cracking', std, lane, g, table), on='bin', how='left')
         ok = (j['d2'] - num(j['silver'])).abs() <= tol
         summary.append(_row('value', std, 'cracking', lane, level, len(j), int(ok.sum()), skipped, note=table))
@@ -255,13 +259,50 @@ def _failing_lanes_checks(prj, tables, summary, mism):
                                                       else 'Failing Lanes differs')})
 
 
+def _d2_lane_reversed(ref, sb, defect, g):
+    """True when a lane's D2 values match silver only in REVERSE chainage order: the vendor wrote that lane's
+    values end-to-start (seen in a D2 CA sheet whose R-lane cracking columns run backwards while its IRC sheet,
+    its other CA columns and D4 run forwards). Needs ≥ DQ_PASS_PCT matches reversed AND more than as is,
+    so a real silver difference is never hidden."""
+    r = ref.sort_values('ch')
+    s = num(sb['silver']).reindex((r['ch'] // g * g).astype('int64')).to_numpy(dtype=float)
+    d = r['d2'].to_numpy(dtype=float)
+    if not len(d):
+        return False
+    tol = _tolerance(defect, r['d2'])
+
+    def share(v):
+        ok = np.abs(v - s) <= tol
+        if defect == 'roughness':
+            ok = ok | _roughness_iri_ok(pd.Series(v), pd.Series(s)).to_numpy()
+        return float(np.mean(ok))
+    as_is, rev = share(d), share(d[::-1])
+    return rev * 100 >= config.DQ_PASS_PCT and rev > as_is
+
+
 def _value_and_breach_checks(prj, tables, summary, mism):
     lanes = sorted(prj.d4_long['lane'].unique())
+    reversed_lanes = set()                      # (std, defect, lane) whose D2 values run end-to-start
+    n0 = len(summary)
+    _value_and_breach_lanes(prj, tables, summary, mism, lanes, reversed_lanes)
+    for row in summary[n0:]:
+        if (row['std'], row['defect'], row['lane']) in reversed_lanes and row['check'] in ('value', 'breach'):
+            if row['status'] == 'PASS':
+                row['status'] = 'D2 REVERSED'          # not PASS / FAIL: D2 itself must be corrected by the vendor
+            row['note'] = ('D2 lists this lane END-TO-START (reversed chainage order); compared reversed. '
+                           + str(row.get('note') or ''))
+    for std, defect, lane in sorted(reversed_lanes):
+        print(f"  DQ: D2 {std} {defect} {lane} values are in reversed chainage order (vendor D2) - see dq_summary")
+
+
+def _value_and_breach_lanes(prj, tables, summary, mism, lanes, reversed_lanes):
     for std, d2 in [('CA', prj.d2_ca), ('IRC', prj.d2_irc)]:
         if d2.empty:
             continue
         c = list(d2.columns)
         st = parse_chainage(d2[pick(c, 'chainage', 'start')])
+        end_c = pick(c, 'chainage', 'end')
+        blk_len = (parse_chainage(d2[end_c]) - st).abs() if end_c else pd.Series(np.nan, index=d2.index)
         for defect, (key, flag_kw, _) in VALUE_CHECKS.items():
             ric = pick(c, 'current', key, 'reporting interval')
             for lane in lanes:
@@ -272,13 +313,20 @@ def _value_and_breach_checks(prj, tables, summary, mism):
                 raw = d2[vc]
                 val = num(raw)
                 skipped = int((raw.notna() & val.isna()).sum())          # e.g. 'Under Const.'
-                ref = pd.DataFrame({'ch': st, 'd2': val}).dropna()
+                ref = pd.DataFrame({'ch': st, 'len': blk_len, 'd2': val}).dropna(subset=['ch', 'd2'])
                 if ref.empty:
                     continue
                 ri = num(d2[ric]).dropna() if ric else pd.Series([100])
                 gi = _d2_interval(ri)           # D2's own interval (50, 100, 1000 …)
                 g = 1000 if gi >= 1000 else 100
                 crack100 = defect == 'cracking' and gi < 1000 and gi % 10 == 0
+                if crack100 or gi in (100, 1000):
+                    # vendor wrote this lane's values end-to-start? compare in that order, flag it (D2 REVERSED)
+                    gb = gi if crack100 else g
+                    sb0 = _silver_bins(prj, tables, defect, std, lane, gb)
+                    if len(sb0) and _d2_lane_reversed(ref, sb0, defect, gb):
+                        ref = ref.sort_values('ch').assign(d2=lambda z: z['d2'].to_numpy()[::-1])
+                        reversed_lanes.add((std, defect, lane))
                 if crack100:                    # cracking at D2's interval from the 10 m rows (any multiple of 10 m)
                     g = gi
                     _crack_checks(prj, tables, summary, mism, std, lane, ref, skipped, gi)
@@ -321,6 +369,8 @@ def _value_and_breach_checks(prj, tables, summary, mism):
                 if std == 'CA' and fc:
                     # same D2 rows as the value check (rows with a value); flags on blank rows are not compared
                     fl = pd.DataFrame({'ch': st, 'flag': num(d2[fc]), 'v': val}).dropna()
+                    if len(fl) and (std, defect, lane) in reversed_lanes:     # D2 flags run end-to-start too
+                        fl = fl.sort_values('ch').assign(flag=lambda z: z['flag'].to_numpy()[::-1])
                     if len(fl):
                         fl['bin'] = (fl['ch'] // g * g).astype('int64')
                         jf = fl.join(sb, on='bin', how='left')
