@@ -9,6 +9,7 @@ The CSV has the columns  Zone, Phase, Cycle, UPC code ..., Status, New Structure
     python run_status_csv.py --csv s3://bucket/path/status.csv --root "$SRC"      CSV on S3
     python run_status_csv.py --csv status.csv --root "$SRC" --parallel 2         2 at a time
     python run_status_csv.py --csv status.csv --root "$SRC" --list               only show the UPCs
+    python run_status_csv.py --csv status.csv --root "$SRC" --status Downloaded  only Status = Downloaded too
     python run_status_csv.py --csv status.csv --root "$SRC" d1 d2                any run_download option
     python run_status_csv.py --csv status.csv --root "$SRC" --resume logs/status_20261027_073821
                                         skip the UPCs that finished in that earlier run (stopped ones run again)
@@ -43,20 +44,25 @@ def read_csv_text(path):
     return data.decode("utf-8-sig", errors="replace")
 
 
-def surveys_from_csv(path):
-    """[(zone, phase, cycle, upc)] of the rows with New Structure = 1, duplicates removed."""
+def surveys_from_csv(path, status=None):
+    """[(zone, phase, cycle, upc)] of the rows with New Structure = 1, duplicates removed.
+    status (e.g. 'Downloaded'): only rows whose Status column is that value too (case / spaces ignored)."""
     reader = csv.DictReader(io.StringIO(read_csv_text(path)))
     columns = {c.strip().lower(): c for c in reader.fieldnames or []}
     upc_col = next((c for k, c in columns.items() if k.startswith("upc")), None)
     new_col = columns.get("new structure")
+    status_col = columns.get("status")
     missing = [n for n, c in (("Zone", columns.get("zone")), ("Phase", columns.get("phase")),
                               ("Cycle", columns.get("cycle")), ("UPC ...", upc_col),
-                              ("New Structure", new_col)) if c is None]
+                              ("New Structure", new_col),
+                              ("Status", status_col if status else "")) if c is None]
     if missing:
         sys.exit(f"column(s) {missing} not found in {path} - columns are {reader.fieldnames}")
     out = []
     for row in reader:
         if (row.get(new_col) or "").strip() not in ("1", "1.0"):
+            continue
+        if status and (row.get(status_col) or "").strip().lower() != status.strip().lower():
             continue
         zone = (row[columns["zone"]] or "").strip().upper()
         phase = re.findall(r"\d+", row[columns["phase"]] or "")
@@ -143,6 +149,7 @@ def main(args):
     parser.add_argument("--root", required=True, help="download root, local folder or s3://bucket/prefix/")
     parser.add_argument("--parallel", type=int, default=3, help="UPCs at the same time (default 3)")
     parser.add_argument("--list", action="store_true", help="only show the UPCs, run nothing")
+    parser.add_argument("--status", help="only rows with this Status too, e.g. --status Downloaded")
     parser.add_argument("--resume", help="earlier log folder (logs/status_...): skip the UPCs that finished there")
     parser.add_argument("--strict-location", action="store_true",
                         help="a UPC in S3 under another zone/phase/cycle than in the CSV is NOT extracted "
@@ -151,8 +158,8 @@ def main(args):
     if not o.strict_location:
         extra = [*extra, "--use-found"]
 
-    surveys = surveys_from_csv(o.csv)
-    print(f"{len(surveys)} UPC(s) with New Structure = 1 in {o.csv}")
+    surveys = surveys_from_csv(o.csv, o.status)
+    print(f"{len(surveys)} UPC(s) with New Structure = 1{f' and Status = {o.status}' if o.status else ''} in {o.csv}")
     if o.resume:
         done = [s for s in surveys if finished(Path(o.resume) / log_name(s))]
         surveys = [s for s in surveys if s not in done]
