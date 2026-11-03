@@ -17,7 +17,7 @@
 set -uo pipefail
 
 BUCKET="${BUCKET:-dhms-new-stgae}"
-BRONZE_PREFIX="${BRONZE_PREFIX:-nsv-extraction}"
+BRONZE_PREFIX="${BRONZE_PREFIX:-nsv_extraction_new}"
 REGION="${REGION:-ap-south-1}"
 RAW_S3_ROOT="${RAW_S3_ROOT:-}"
 ZONE="" PHASE="" CYCLE="" UPC=""

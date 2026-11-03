@@ -4,7 +4,7 @@ One UPC at a time, S3 in → S3 out, the three layers run one after the other on
 
 | # | Layer | Code | Reads | Writes |
 |---|---|---|---|---|
-| 1 | Bronze | [bronze/](bronze/README.md) `run_bronze_s3.sh` | raw vendor download `RAW_S3_ROOT/Zone A/Phase 2/Cycle 2/<UPC>/Deliverable 1..4` | `s3://dhms-new-stgae/nsv-extraction/bronze/nsv/<part>/d1..d4/run=<time>/` |
+| 1 | Bronze | [bronze/](bronze/README.md) `run_bronze_s3.sh` | raw vendor download `RAW_S3_ROOT/Zone A/Phase 2/Cycle 2/<UPC>/Deliverable 1..4` | `s3://dhms-new-stgae/nsv_extraction_new/bronze/nsv/<part>/d1..d4/run=<time>/` |
 | 2 | Silver | [silver/](silver/README.md) `run_silver_s3.sh` | bronze, newest `run=` per deliverable | `s3://dhms-new-stgae/nsv-silver/<part>/dlm_kpi/ dlm_postgres/ dq/ run.log` |
 | 3 | Gold | [gold/](gold/README.md) `run_gold_s3.sh` | silver `dlm_kpi/*.parquet` + project master | `s3://dhms-new-stgae/nsv-gold/<part>/ris_trends_dw.csv final_intermediate.csv ris_view_dw.csv gold_run.log` |
 
@@ -26,13 +26,14 @@ The layer code is unchanged apart from env overrides in `silver/run_silver_s3.sh
     { "Effect": "Allow", "Action": ["s3:ListBucket"], "Resource": "arn:aws:s3:::dhms-new-stgae" },
     { "Effect": "Allow", "Action": ["s3:GetObject"],  "Resource": "arn:aws:s3:::dhms-new-stgae/*" },
     { "Effect": "Allow", "Action": ["s3:PutObject"],  "Resource": [
-        "arn:aws:s3:::dhms-new-stgae/nsv-extraction/*",
+        "arn:aws:s3:::dhms-new-stgae/nsv_extraction_new/*",
         "arn:aws:s3:::dhms-new-stgae/nsv-silver/*",
         "arn:aws:s3:::dhms-new-stgae/nsv-gold/*" ] }
   ]
 }
 ```
-If the raw download is in another bucket, also allow `s3:ListBucket` + `s3:GetObject` on that bucket.
+The raw download is in another bucket (`nhai-dhms-uat/nsv-dowloads-raw/…`), so the role also needs
+`s3:ListBucket` + `s3:GetObject` there. The EC2 instance used for the earlier bronze runs already has both.
 
 ## 2. Setup (once)
 
@@ -45,8 +46,10 @@ chmod +x run_e2e.sh bronze/run_bronze_s3.sh silver/run_silver_s3.sh gold/run_gol
 ```
 Amazon Linux 2023: `sudo dnf install -y git python3.11 tesseract` and `python3.11 -m venv .venv`.
 
-Edit `pipeline.env`: set **`RAW_S3_ROOT`** (the folder that holds `Zone A`, `Zone B`, …), and optionally
-`PROJECT_MASTER_S3` and `TRACKER_S3`.
+`pipeline.env` already holds the raw root (`RAW_S3_ROOT`, the `$SRC` of the earlier bronze runs) and the bronze
+output `nsv_extraction_new`. Set `PROJECT_MASTER_S3` and, optionally, `TRACKER_S3`.
+Bronze is read from **`nsv_extraction_new`**, not the old `nsv-extraction`. In the old prefix, the CA comparison
+table of N/02001/19004/DL was rejected, so silver had no CA reporting intervals.
 
 ## 3. Run
 

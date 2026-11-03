@@ -142,9 +142,9 @@ CONDITION_SEVERITY_ORDER = ['very poor', 'poor', 'fair', 'good', 'very good']   
 
 # ── dlm_threshold_mapping.deliverable_path ───────────────────────────────────
 # S3 root of the bronze NSV output. deliverable_path = <root>/zone=<z>/phase=<p>/cycle=<c>/<UPC>
-# (e.g. s3://dhms-new-stgae/nsv-extraction/bronze/nsv/zone=A/phase=2/cycle=1/N-02007-11001-HR).
+# (e.g. s3://dhms-new-stgae/nsv_extraction_new/bronze/nsv/zone=A/phase=2/cycle=1/N-02007-11001-HR).
 # Set to None to write the project folder the run read instead.
-BRONZE_S3_ROOT = 's3://dhms-new-stgae/nsv-extraction/bronze/nsv'
+BRONZE_S3_ROOT = _os.environ.get('NSV_BRONZE_S3_ROOT', 's3://dhms-new-stgae/nsv_extraction_new/bronze/nsv')   # run_silver_s3.sh sets it
 # S3 location of the silver output (for reference). The code writes to OUTPUT_ROOT on the local / mounted disk;
 # that folder is what goes to this S3 prefix (same zone=/phase=/cycle=/<UPC> layout).
 SILVER_S3_ROOT = 's3://dhms-new-stgae/nsv-silver'

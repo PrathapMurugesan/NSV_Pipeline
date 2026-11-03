@@ -1,7 +1,7 @@
 # Running NSV Silver on EC2 (S3 in → S3 out)
 
 ```
-in : s3://dhms-new-stgae/nsv-extraction/bronze/nsv/zone=A/phase=2/cycle=1/N-02007-11001-HR/
+in : s3://dhms-new-stgae/nsv_extraction_new/bronze/nsv/zone=A/phase=2/cycle=1/N-02007-11001-HR/
 out: s3://dhms-new-stgae/nsv-silver/zone=A/phase=2/cycle=1/N-02007-11001-HR/
         dlm_kpi/*.parquet   dlm_postgres/*.parquet   dq/*.csv   run.log
      s3://dhms-new-stgae/nsv-silver/_batches/batch=<time>.csv
@@ -28,7 +28,7 @@ Attach a role to the instance with at least:
 }
 ```
 
-Check from the instance: `aws s3 ls s3://dhms-new-stgae/nsv-extraction/bronze/nsv/zone=A/phase=2/cycle=1/`
+Check from the instance: `aws s3 ls s3://dhms-new-stgae/nsv_extraction_new/bronze/nsv/zone=A/phase=2/cycle=1/`
 
 ## 2. Setup (once) — Python 3.10 or newer
 

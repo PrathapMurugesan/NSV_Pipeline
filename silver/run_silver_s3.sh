@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Run the NSV silver layer on EC2 for ONE UPC stored in S3.
 #
-#   input : s3://dhms-new-stgae/nsv-extraction/bronze/nsv/zone=A/phase=2/cycle=1/N-02007-11001-HR/
+#   input : s3://dhms-new-stgae/nsv_extraction_new/bronze/nsv/zone=A/phase=2/cycle=1/N-02007-11001-HR/
 #   output: s3://dhms-new-stgae/nsv-silver/zone=A/phase=2/cycle=1/N-02007-11001-HR/
 #
 # Usage (defaults = the UPC above):
@@ -20,7 +20,7 @@ set -uo pipefail
 
 # ── defaults ─────────────────────────────────────────────────────────────────
 BUCKET="${BUCKET:-dhms-new-stgae}"                         # env overrides: set by ../run_e2e.sh from pipeline.env
-BRONZE_PREFIX="${BRONZE_PREFIX:-nsv-extraction}/bronze/nsv"   # bronze writes <prefix>/bronze/nsv/zone=...
+BRONZE_PREFIX="${BRONZE_PREFIX:-nsv_extraction_new}/bronze/nsv"   # bronze writes <prefix>/bronze/nsv/zone=...
 SILVER_PREFIX="${SILVER_PREFIX:-nsv-silver}"
 REGION="${REGION:-ap-south-1}"
 ZONE="A"
@@ -59,6 +59,7 @@ command -v aws >/dev/null || { echo "ERROR: aws CLI not installed"; exit 2; }
 
 PART="zone=${ZONE}/phase=${PHASE}/cycle=${CYCLE}/${UPC}"
 S3_IN="s3://${BUCKET}/${BRONZE_PREFIX}/${PART}/"
+export NSV_BRONZE_S3_ROOT="s3://${BUCKET}/${BRONZE_PREFIX}"     # config.BRONZE_S3_ROOT → dlm_threshold_mapping.deliverable_path
 S3_OUT_ROOT="s3://${BUCKET}/${SILVER_PREFIX}"
 S3_OUT="${S3_OUT_ROOT}/${PART}/"
 
