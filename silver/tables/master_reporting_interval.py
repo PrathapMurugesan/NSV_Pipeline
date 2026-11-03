@@ -4,7 +4,8 @@ master_reporting_interval
   One row per D2 comparison sheet that exists:
       'Comparison as per CA'  → standard = 'CA'
       'Comparison as per IRC' → standard = 'IRC'
-  (both sheets → 2 rows; only one → 1 row; none → empty table).
+  (both sheets → 2 rows; a missing sheet still gets its row when D2 'Inputs (Thresholds)' has its intervals;
+   nothing for a standard → no row).
 
   overall_reporting_interval   ← 'Overall Reporting Interval'
   roughness_reporting_interval ← 'Current Cycle | Roughness BI | Reporting Interval'
@@ -40,11 +41,16 @@ DEFECT_INTERVAL_COLS = {
 def build(prj):
     rows = []
     for std, d2 in [('CA', prj.d2_ca), ('IRC', prj.d2_irc)]:
+        source = f'Comparison as per {std}'
         if d2 is None or d2.empty:
-            print(f"  D2 'Comparison as per {std}': not found → no {std} row")
-            continue
+            # no comparison sheet: the D2 'Inputs (Thresholds)' intervals still give this standard a row
+            if not any((std.lower(), d) in prj._thr_info['intervals'] for d in ('roughness', 'rutting', 'cracking', 'ravelling')):
+                print(f"  D2 'Comparison as per {std}': not found, no {std} interval in Inputs (Thresholds) → no {std} row")
+                continue
+            source = 'Inputs (Thresholds)'
+            print(f"  D2 'Comparison as per {std}': not found → {std} intervals from D2 Inputs (Thresholds)")
         r = {'upc': prj.upc_slash, 'upc_code': prj.upc, 'zone': prj.zone, 'phase': prj.phase, 'cycle': int(prj.cycle),
-             'standard': std, 'source_sheet': f'Comparison as per {std}',
+             'standard': std, 'source_sheet': source,
              'overall_reporting_interval': prj.d2_interval(std, 'overall')}
         for col in DEFECT_INTERVAL_COLS:                      # same function every table uses (Project.d2_interval)
             r[col] = prj.d2_interval(std, col.replace('_reporting_interval', ''))

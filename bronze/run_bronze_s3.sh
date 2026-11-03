@@ -44,12 +44,19 @@ done
 UPC_DASH="$(echo "$UPC" | tr '/_ ' '---' | tr '[:lower:]' '[:upper:]')"
 export NSV_OUTPUT="s3://${BUCKET}/${BRONZE_PREFIX}"
 export AWS_DEFAULT_REGION="$REGION"
+# Same switches as the production bronze runs (nsv_extraction_new, 1000+ UPCs). A vendor sheet missing schema
+# headers (e.g. no 'Previous Cycle' block, fewer lanes) is saved with the headers it has, and the missing ones
+# are listed in the batch report. Silver reads only 'Current Cycle'. A missing workbook does not stop the rest.
+export NSV_CHECK_HEADERS="${NSV_CHECK_HEADERS:-0}"
+export NSV_STOP_IF_WORKBOOK_MISSING="${NSV_STOP_IF_WORKBOOK_MISSING:-0}"
 S3_OUT="${NSV_OUTPUT}/bronze/nsv/zone=${ZONE}/phase=${PHASE}/cycle=${CYCLE}/${UPC_DASH}/"
+command -v tesseract >/dev/null || echo "WARNING: tesseract not installed - images without EXIF GPS get no location (sudo apt install -y tesseract-ocr)"
 
 echo "════════════════════════════════════════════════════════════════════"
 echo " BRONZE  : ${UPC}  (zone=${ZONE} phase=${PHASE} cycle=${CYCLE})"
 echo " raw     : ${RAW_S3_ROOT}"
 echo " output  : ${S3_OUT}"
+echo " switches: NSV_CHECK_HEADERS=${NSV_CHECK_HEADERS} NSV_STOP_IF_WORKBOOK_MISSING=${NSV_STOP_IF_WORKBOOK_MISSING}"
 echo " python  : ${PYTHON}"
 echo "════════════════════════════════════════════════════════════════════"
 

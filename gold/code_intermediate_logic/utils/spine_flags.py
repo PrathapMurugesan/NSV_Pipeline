@@ -49,6 +49,24 @@ def build_spine(chainage_df):
     return spine
 
 
+def _same_key_types(left, right):
+    """merge_asof needs identical key dtypes on both sides. They differ per survey: chainages are int64 in a
+    table with whole-metre chainages and float64 with decimals (or after the window floor()), and a date can
+    be datetime in one source and text in another. Chainages → float64; a 'by' key whose dtypes differ →
+    the same text form on both sides (dates as YYYY-MM-DD)."""
+    left = left.assign(_smin=left["_smin"].astype("float64"), _smax=left["_smax"].astype("float64"))
+    right = right.assign(_min=right["_min"].astype("float64"), _reach=right["_reach"].astype("float64"))
+    for k in JOIN_KEYS:
+        if left[k].dtype == right[k].dtype:
+            continue
+        if k == "detected_on":
+            as_text = lambda s: pd.to_datetime(s, errors="coerce").dt.strftime("%Y-%m-%d").astype("string")
+        else:
+            as_text = lambda s: s.astype("string")
+        left[k], right[k] = as_text(left[k]), as_text(right[k])
+    return left, right
+
+
 def _covered(segments, intervals):
     """1 where a segment [_smin, _smax] lies inside any interval [_min, _max] with the same JOIN_KEYS.
 
@@ -62,11 +80,9 @@ def _covered(segments, intervals):
     intervals = intervals.assign(_reach=intervals.groupby(JOIN_KEYS, dropna=False)["_max"].cummax())
 
     left = segments.dropna(subset=["_smin"]).sort_values("_smin", kind="stable")
-    matched = pd.merge_asof(
-        left[["_row", "_smin", "_smax"] + JOIN_KEYS],
-        intervals[["_min", "_reach"] + JOIN_KEYS],
-        left_on="_smin", right_on="_min", by=JOIN_KEYS, direction="backward",
-    )
+    left, right = _same_key_types(left[["_row", "_smin", "_smax"] + JOIN_KEYS],
+                                  intervals[["_min", "_reach"] + JOIN_KEYS])
+    matched = pd.merge_asof(left, right, left_on="_smin", right_on="_min", by=JOIN_KEYS, direction="backward")
     flags[matched.loc[matched["_reach"] >= matched["_smax"], "_row"].to_numpy()] = 1
     return flags
 

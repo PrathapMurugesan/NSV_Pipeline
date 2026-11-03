@@ -716,8 +716,10 @@ class Project:
         """Reporting interval (m) from D2, CURRENT CYCLE only — the one place every interval comes from:
            sheet 'Comparison as per CA' (std CA) or 'as per IRC' (std IRC), column
            'Current Cycle | <defect> … | Reporting Interval' (defect 'overall': 'Overall Reporting Interval');
-           the most common value of the column (D2's last, shorter block is ignored). No sheet / column / value
-           → None. The tracker interval is never used."""
+           the most common value of the column (D2's last, shorter block is ignored).
+           No sheet / column / value → the interval of the defect in D2 'Inputs (Thresholds)' (same D2 file;
+           e.g. the CA comparison sheet was not delivered or not extracted), else None.
+           The tracker interval is never used."""
         key = (str(std).upper(), defect)
         cache = self.__dict__.setdefault('_d2_interval_cache', {})
         if key in cache:
@@ -736,6 +738,9 @@ class Project:
                     v = num(d2[c]).dropna()
                     out = float(v.mode().iloc[0]) if len(v) else None
                     break
+        if out is None and defect != 'overall':
+            fallback = self._thr_info['intervals'].get((key[0].lower(), defect))
+            out = float(fallback) if fallback else None
         cache[key] = out
         return out
 
