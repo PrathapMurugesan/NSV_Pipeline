@@ -110,6 +110,9 @@ DQ_TOLERANCE      = 0.01    # |D2 − silver| allowed for rut depth (mm), BI (mm
 # per-defect tolerance where D2 rounds: roughness BI is in mm/km (1,000–5,000), so 1 mm/km (< 0.1 %) forgives
 # D2's rounding to whole numbers but still reports a real difference; every other defect uses DQ_TOLERANCE
 DQ_TOLERANCE_BY_DEFECT = {'roughness': 1.0}
+# True = the tolerance is at least one unit of the last decimal D2 shows in that column (D2 rut depth with 1 decimal
+# → 0.1 mm), because D2 rounds its block values. Measured per UPC and column, so every vendor's rounding is covered.
+DQ_TOLERANCE_D2_PRECISION = True
 DQ_AREA_TOLERANCE = 0.01    # sq m, pothole area per lane per 100 m
 DQ_POTHOLE_EXCLUDE_SEVERITY = ['delamination']   # D2 pothole rows not counted as potholes
 

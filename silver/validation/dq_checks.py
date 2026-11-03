@@ -91,6 +91,30 @@ def _silver_bins(prj, tables, defect, std, lane, g, table=None):
             .groupby('ch').agg(silver=(col, 'first'), silver_breach=('breach_flag', 'first')))
 
 
+def _d2_interval(ri):
+    """D2 reporting interval (m) of a block of rows: most common value of its interval column, 100 when none."""
+    return int(round(float(ri.mode().iloc[0]))) if len(ri) else 100
+
+
+def _decimals(values):
+    """Decimals D2 shows for a column (0-4): the fewest k with every value == round(value, k)."""
+    v = num(pd.Series(values)).dropna().to_numpy(dtype=float)
+    for k in range(5):
+        if np.allclose(v, np.round(v, k), rtol=0, atol=1e-9):
+            return k
+    return 4
+
+
+def _tolerance(defect, d2_values):
+    """|D2 − silver| allowed: the configured tolerance, or one unit of D2's last shown decimal when that is larger
+    (config.DQ_TOLERANCE_D2_PRECISION). D2 rounds its 100 m values (rut depth 3.2 for silver 3.15); one full unit,
+    not half, because D2 rounds values it averaged from already rounded 10 m values."""
+    tol = config.DQ_TOLERANCE_BY_DEFECT.get(defect, config.DQ_TOLERANCE)
+    if getattr(config, 'DQ_TOLERANCE_D2_PRECISION', False):
+        tol = max(tol, 10.0 ** -_decimals(d2_values))
+    return tol + 1e-9                         # 3.2 − 3.1 is 0.10000000000000009 in floating point
+
+
 def _row(check, std, defect, lane, level, total, matched, skipped, note=''):
     pct = round(100.0 * matched / total, 1) if total else None
     return {'upc': None, 'check': check, 'std': std, 'defect': defect, 'lane': lane, 'level': level,
@@ -99,16 +123,25 @@ def _row(check, std, defect, lane, level, total, matched, skipped, note=''):
                                        'FAIL' if pct is not None else 'NO DATA'), 'note': note}
 
 
-def _crack_checks(prj, tables, summary, mism, std, lane, ref, skipped):
-    """D2 100 m cracking % vs the three cracking tables (see CRACK_CHECKS); + CA breach flag vs the 100 m table."""
-    tol = config.DQ_TOLERANCE_BY_DEFECT.get('cracking', config.DQ_TOLERANCE)
+def _crack_checks(prj, tables, summary, mism, std, lane, ref, skipped, gi=100):
+    """D2 cracking % (blocks of gi m) vs the three cracking tables (see CRACK_CHECKS).
+    gi = D2's interval: the 10 m rows are averaged per gi m block; a 100 m / 1 km table is compared with the
+    average of the D2 blocks inside it (only when the D2 blocks fit in it exactly)."""
+    tol = _tolerance('cracking', ref['d2'])
     for table, g, level in CRACK_CHECKS:
+        if table == 'master_cracking':        # 10 m rows can be averaged to any D2 interval
+            g, level = gi, f'{gi} m (10 m avg)'
         if table not in tables:
             summary.append({**_row('value', std, 'cracking', lane, level, 0, 0, skipped),
                             'd2_rows': len(ref), 'status': 'NOT RUN', 'note': f'{table} not in this run'})
             continue
+        if g % gi:                            # e.g. D2 200 m blocks vs the 100 m table: not comparable
+            summary.append({**_row('value', std, 'cracking', lane, level, 0, 0, skipped),
+                            'd2_rows': len(ref), 'status': 'NOT RUN',
+                            'note': f'D2 interval {gi} m does not fit in {table} blocks of {g} m'})
+            continue
         r = ref.assign(bin=(ref['ch'] // g * g).astype('int64'))
-        if g == 1000:                         # D2 has no 1 km cracking: average of its 100 m values in the km
+        if g > gi:                            # D2 has no block this size: average of its blocks inside it
             r = r.groupby('bin', as_index=False)['d2'].mean()
         j = r.join(_silver_bins(prj, tables, 'cracking', std, lane, g, table), on='bin', how='left')
         ok = (j['d2'] - num(j['silver'])).abs() <= tol
@@ -146,14 +179,39 @@ def _failing_lanes_checks(prj, tables, summary, mism):
                 summary.append({**_row('failing_lanes', std, defect, '-', '-', 0, 0, 0),
                                 'note': 'no current-cycle reporting interval in D2 (no current data)'})
                 continue
-            g = 1000 if iv[rows].mode().iloc[0] >= 1000 else 100
-            level = '1 km' if g == 1000 else '100 m'
-            table = f"{prefix}_{'parent' if g == 1000 else 'child_100m'}"
+            gi = _d2_interval(iv[rows])
+            g = 1000 if gi >= 1000 else 100
+            # cracking at another D2 interval (e.g. 50 m): 10 m rows averaged per D2 block, breach per lane
+            from_10m = defect == 'cracking' and gi not in (100, 1000) and gi < 1000 and gi % 10 == 0
+            if from_10m:
+                g = gi
+            level = '1 km' if g == 1000 else f'{g} m'
+            table = 'master_cracking' if from_10m else f"{prefix}_{'parent' if g == 1000 else 'child_100m'}"
             flag = d2.loc[rows, flc].astype(str).str.strip().str.title()
             ok_val = flag.isin(['Yes', 'No'])
             skipped = int((~ok_val).sum())
             ref = pd.DataFrame({'bin': (st[rows][ok_val] // g * g), 'd2': flag[ok_val]}).dropna(subset=['bin'])
             ref['bin'] = ref['bin'].astype('int64')
+            if gi not in (100, 1000) and not from_10m:
+                summary.append({**_row('failing_lanes', std, defect, '-', f'{gi} m', 0, 0, skipped),
+                                'd2_rows': len(ref), 'status': 'NOT RUN',
+                                'note': f'D2 interval {gi} m: silver has {defect} only at 100 m and 1 km'})
+                continue
+            if from_10m and table in tables:
+                lanes = sorted(prj.d4_long['lane'].unique())
+                per_lane = [_silver_bins(prj, tables, 'cracking', std, ln, g)['silver_breach'] for ln in lanes]
+                sil = (pd.concat(per_lane).groupby(level=0).max().map({1: 'Yes', 0: 'No', 1.0: 'Yes', 0.0: 'No'})
+                       if per_lane else pd.Series(dtype=object))
+                j = ref.join(sil.rename('silver'), on='bin')
+                ok = j['d2'] == j['silver']
+                summary.append(_row('failing_lanes', std, defect, '-', level, len(j), int(ok.sum()), skipped,
+                                    note=f"master_cracking 10 m rows averaged per {g} m: Yes when any lane breaches"))
+                for _, q in j[~ok].iterrows():
+                    mism.append({'check': 'failing_lanes', 'std': std, 'defect': defect, 'lane': '-', 'level': level,
+                                 'bin_start': int(q['bin']), 'd2_value': q['d2'], 'silver_value': q['silver'],
+                                 'diff': None, 'reason': 'no silver row for this block' if pd.isna(q['silver'])
+                                 else 'Failing Lanes differs'})
+                continue
             if table not in tables:
                 summary.append({**_row('failing_lanes', std, defect, '-', level, 0, 0, skipped),
                                 'd2_rows': len(ref), 'status': 'NOT RUN', 'note': f'{table} not in this run'})
@@ -201,14 +259,24 @@ def _value_and_breach_checks(prj, tables, summary, mism):
                 if ref.empty:
                     continue
                 ri = num(d2[ric]).dropna() if ric else pd.Series([100])
-                g = 1000 if (len(ri) and ri.mode().iloc[0] >= 1000) else 100
-                crack100 = defect == 'cracking' and g == 100
-                if crack100:                    # three cracking tables vs D2 100 m (value); breach below
-                    _crack_checks(prj, tables, summary, mism, std, lane, ref, skipped)
-                level = '1 km' if g == 1000 else '100 m'
+                gi = _d2_interval(ri)           # D2's own interval (50, 100, 1000 …)
+                g = 1000 if gi >= 1000 else 100
+                crack100 = defect == 'cracking' and gi < 1000 and gi % 10 == 0
+                if crack100:                    # cracking at D2's interval from the 10 m rows (any multiple of 10 m)
+                    g = gi
+                    _crack_checks(prj, tables, summary, mism, std, lane, ref, skipped, gi)
+                level = '1 km' if g == 1000 else f'{g} m'
                 need = 'master_cracking' if defect == 'cracking' else f"master_{defect}_{'parent' if g >= 1000 else 'child_100m'}"
-                if crack100:                    # breach flags: from master_cracking_child_100m (else 10 m rows averaged)
-                    t100 = 'master_cracking_child_100m' if 'master_cracking_child_100m' in tables else None
+                if not crack100 and gi not in (100, 1000):
+                    # rutting / roughness are only built at 100 m and 1 km: a D2 block of another size has no
+                    # silver row to compare with → NOT RUN (comparing it with a 100 m row would be a false FAIL)
+                    summary.append({**_row('value', std, defect, lane, f'{gi} m', 0, 0, skipped),
+                                    'd2_rows': len(ref), 'status': 'NOT RUN',
+                                    'note': f'D2 interval {gi} m: silver has {defect} only at 100 m and 1 km'})
+                    continue
+                if crack100:                    # breach flags: 100 m table at 100 m, else the 10 m rows averaged
+                    t100 = ('master_cracking_child_100m' if gi == 100 and 'master_cracking_child_100m' in tables
+                            else None)
                     if not t100 and 'master_cracking' not in tables:
                         continue
                     sb = _silver_bins(prj, tables, defect, std, lane, g, t100)
@@ -221,7 +289,7 @@ def _value_and_breach_checks(prj, tables, summary, mism):
                     sb = _silver_bins(prj, tables, defect, std, lane, g)
                     j = ref.join(sb, on='bin', how='left')
                     diff = (j['d2'] - num(j['silver'])).abs()
-                    ok = diff <= config.DQ_TOLERANCE_BY_DEFECT.get(defect, config.DQ_TOLERANCE)
+                    ok = diff <= _tolerance(defect, ref['d2'])
                     summary.append(_row('value', std, defect, lane, level, len(j), int(ok.sum()), skipped))
                     bad = j[~ok]
                     for _, r in bad.iterrows():
