@@ -13,6 +13,8 @@ The CSV has the columns  Zone, Phase, Cycle, UPC code ..., Status, New Structure
     python run_status_csv.py --csv status.csv --root "$SRC" d1 d2                any run_download option
     python run_status_csv.py --csv status.csv --root "$SRC" --resume logs/status_20261027_073821
                                         skip the UPCs that finished in that earlier run (stopped ones run again)
+    python run_status_csv.py --csv status.csv --root "$SRC" --resume all
+                                        skip the UPCs that finished in any logs/status_* folder
 
 One log per UPC:   logs/status_<timestamp>/<zone>_<phase>_<cycle>_<UPC>.log
 Summary:           logs/status_<timestamp>/summary.csv   (UPC, status, exit code, log file)
@@ -150,7 +152,9 @@ def main(args):
     parser.add_argument("--parallel", type=int, default=3, help="UPCs at the same time (default 3)")
     parser.add_argument("--list", action="store_true", help="only show the UPCs, run nothing")
     parser.add_argument("--status", help="only rows with this Status too, e.g. --status Downloaded")
-    parser.add_argument("--resume", help="earlier log folder (logs/status_...): skip the UPCs that finished there")
+    parser.add_argument("--resume", action="append",
+                        help="earlier log folder (logs/status_...): skip the UPCs that finished there; "
+                             "give it more than once for several folders, or --resume all for every logs/status_*")
     parser.add_argument("--strict-location", action="store_true",
                         help="a UPC in S3 under another zone/phase/cycle than in the CSV is NOT extracted "
                              "(default: it is extracted where it is, and the summary says so)")
@@ -161,9 +165,11 @@ def main(args):
     surveys = all_surveys = surveys_from_csv(o.csv, o.status)
     print(f"{len(surveys)} UPC(s) with New Structure = 1{f' and Status = {o.status}' if o.status else ''} in {o.csv}")
     if o.resume:
-        done = [s for s in surveys if finished(Path(o.resume) / log_name(s))]
+        folders = sorted((PROJECT_ROOT / "logs").glob("status_*")) if "all" in o.resume else [Path(r) for r in o.resume]
+        done = [s for s in surveys if any(finished(f / log_name(s)) for f in folders)]
         surveys = [s for s in surveys if s not in done]
-        print(f"--resume {o.resume}: {len(done)} already finished there, skipped - {len(surveys)} to run")
+        print(f"--resume {', '.join(f.name for f in folders)}: {len(done)} already finished there, skipped"
+              f" - {len(surveys)} to run")
     for zone, phase, cycle, upc in surveys:
         print(f"  zone {zone}  phase {phase}  cycle {cycle}  {upc}")
     if o.list or not surveys:
